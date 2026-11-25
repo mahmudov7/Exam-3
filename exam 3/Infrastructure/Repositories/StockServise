@@ -1,0 +1,98 @@
+
+using Npgsql;
+using MiniShop.Data;
+
+namespace MiniShop.Services;
+
+public class StockService
+{
+    public void RegisterSale(int productId, int quantity)
+    {
+        if (quantity <= 0)
+        {
+            Console.WriteLine("Quantity must be greater than 0.");
+            return;
+        }
+
+        using var connection = Database.GetConnection();
+        connection.Open();
+
+        using var transaction = connection.BeginTransaction();
+
+        string updateSql = "update products set quantity = quantity - @quantity WHERE id = @id and quantity >= @quantity";
+
+        using var updateCommand = new NpgsqlCommand(
+            updateSql, connection, transaction);
+
+        updateCommand.Parameters.AddWithValue("@id", productId);
+        updateCommand.Parameters.AddWithValue("@quantity", quantity);
+
+        int rows = updateCommand.ExecuteNonQuery();
+
+        if (rows == 0)
+        {
+            transaction.Rollback();
+            Console.WriteLine("Product not found or insufficient quantity.");
+            return;
+        }
+
+        string insertSql = "insert into stock_movements (product_id, change_qty) values (@id, @change)";
+
+        using var insertCommand = new NpgsqlCommand(
+            insertSql, connection, transaction);
+
+        insertCommand.Parameters.AddWithValue("@id", productId);
+        insertCommand.Parameters.AddWithValue("@change", -quantity);
+
+        insertCommand.ExecuteNonQuery();
+
+        transaction.Commit();
+
+        Console.WriteLine("Sale registered successfully!");
+    }
+
+    public void Restock(int productId, int quantity)
+    {
+        if (quantity <= 0)
+        {
+            Console.WriteLine("Quantity must be greater than 0.");
+            return;
+        }
+
+        using var connection = Database.GetConnection();
+        connection.Open();
+
+        using var transaction = connection.BeginTransaction();
+
+        string updateSql = "update products set quantity = quantity + @quantity WHERE id = @id";
+
+        using var updateCommand = new NpgsqlCommand(
+            updateSql, connection, transaction);
+
+        updateCommand.Parameters.AddWithValue("@id", productId);
+        updateCommand.Parameters.AddWithValue("@quantity", quantity);
+
+        int rows = updateCommand.ExecuteNonQuery();
+
+        if (rows == 0)
+        {
+            transaction.Rollback();
+            Console.WriteLine("Product not found.");
+            return;
+        }
+
+        string insertSql = "insert into stock_movements (product_id, change_qty) values (@id, @change)";
+
+        using var insertCommand = new NpgsqlCommand(
+            insertSql, connection, transaction);
+
+        insertCommand.Parameters.AddWithValue("@id", productId);
+        insertCommand.Parameters.AddWithValue("@change", quantity);
+
+        insertCommand.ExecuteNonQuery();
+
+        transaction.Commit();
+
+        Console.WriteLine("Product restocked successfully!");
+    }
+}
